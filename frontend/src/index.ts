@@ -20,7 +20,7 @@ async function chatWithOllama(message: string): Promise<string> {
     let apiUrl: string;
     let requestBody: any;
     
-    const systemContent = `你是資安與 AI 安全治理領域的資深顧問（偏實務、可落地）。以繁體中文回答，必要時使用英文技術名詞。避免猜測；若資訊不足，先反問澄清。`;
+    const systemContent = `你是資安與 AI 安全治理領域的資深顧問（偏實務、可落地）。請用使用者訊息的主要語言回覆（例如：日文→日文、法文→法文、英文→英文、繁中→繁中）。若使用者混用語言，請用主要語言回覆，必要時保留少量英文技術名詞。資訊不足時先反問澄清。`;
 
     if (isLocalDev) {
       // Local development: use Ollama API
