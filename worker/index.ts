@@ -3,6 +3,8 @@ type ExportedHandler<T = unknown> = {
   fetch: (request: Request, env: T, ctx: { waitUntil: (promise: Promise<any>) => void }) => Response | Promise<Response>;
 };
 
+const ipLastSeenAt = new Map<string, number>();
+
 export default {
   async fetch(
     request: Request,
@@ -34,6 +36,33 @@ export default {
 
     if (request.method !== 'POST' || url.pathname !== '/api/chat') {
       return new Response('Not Found', { status: 404 });
+    }
+
+    const ip =
+      request.headers.get('CF-Connecting-IP') ??
+      request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ??
+      '';
+    if (ip) {
+      const now = Date.now();
+      const last = ipLastSeenAt.get(ip) ?? 0;
+      const minIntervalMs = 3000;
+      if (now - last < minIntervalMs) {
+        const retryAfter = Math.ceil((minIntervalMs - (now - last)) / 1000);
+        return new Response(JSON.stringify({ error: 'RATE_LIMITED', retryAfter }), {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'Retry-After': String(retryAfter),
+            ...(origin ? { 'Access-Control-Allow-Origin': origin } : {})
+          }
+        });
+      }
+      ipLastSeenAt.set(ip, now);
+      if (ipLastSeenAt.size > 5000) {
+        const entries = Array.from(ipLastSeenAt.entries());
+        entries.sort((a, b) => a[1] - b[1]);
+        for (let i = 0; i < 1000; i++) ipLastSeenAt.delete(entries[i][0]);
+      }
     }
 
     const body = await request.json().catch(() => null) as null | { messages?: Array<{ role: string; content: string }> };
