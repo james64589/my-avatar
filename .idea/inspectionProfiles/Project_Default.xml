@@ -1,0 +1,48 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="Eslint" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="torch" />
+          <option value="torchvision" />
+          <option value="lightning" />
+          <option value="pandas" />
+          <option value="numpy" />
+          <option value="ccxt" />
+          <option value="aiohttp" />
+          <option value="scikit-learn" />
+          <option value="einops" />
+          <option value="streamlit" />
+          <option value="fastapi" />
+          <option value="uvicorn" />
+          <option value="matplotlib" />
+          <option value="seaborn" />
+          <option value="python-dotenv" />
+          <option value="loguru" />
+          <option value="pytest" />
+          <option value="transformers" />
+          <option value="accelerate" />
+          <option value="sentencepiece" />
+          <option value="tokenizers" />
+          <option value="asyncio" />
+          <option value="ipaddress" />
+          <option value="python-nmap" />
+          <option value="tkinter-tooltip" />
+          <option value="pillow" />
+          <option value="Levenshtein" />
+          <option value="python-Levenshtein" />
+          <option value="ujson" />
+          <option value="cryptography" />
+          <option value="pycryptodome" />
+          <option value="pywin32" />
+          <option value="python-docx" />
+          <option value="openpyxl" />
+          <option value="python-pptx" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="SqlNoDataSourceInspection" enabled="false" level="WARNING" enabled_by_default="false" />
+  </profile>
+</component>
