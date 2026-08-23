@@ -255,6 +255,9 @@ async function chatWithOllama(message: string): Promise<string> {
       } catch {
         details = null;
       }
+      if (!isLocalDev && typeof details?.message?.content === 'string' && details.message.content.trim()) {
+        return details.message.content.trim();
+      }
       if (!isLocalDev && details?.upstreamStatus === 503) {
         return uiText(lang, 'busy');
       }

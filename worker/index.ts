@@ -183,23 +183,44 @@ export default {
     }
 
     if (!upstream.ok) {
-      if (upstream.status === 429) {
-        const isChinese = request.headers.get('Accept-Language')?.includes('zh');
-        const errorMsg = isChinese
-          ? '目前請求太頻繁，請稍後再試。 若持續出現，通常代表 API 配額或速率已達上限。'
-          : 'Too many requests. Please try again shortly. If it keeps happening, you may have hit the API quota/rate limit.';
-        return new Response(JSON.stringify({ message: { content: errorMsg }, upstreamStatus: 429 }), {
-          status: 429,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(origin ? { 'Access-Control-Allow-Origin': origin } : {})
-          }
-        });
-      }
       const errText = lastErrText ?? (await upstream.text().catch(() => ''));
       const retryAfter = upstream.headers.get('Retry-After');
+
+      const isChinese = request.headers.get('Accept-Language')?.includes('zh');
+      let errorMsg: string;
+      if (upstream.status === 401) {
+        errorMsg = isChinese
+          ? '上游拒絕授權（可能是 ChatAnywhere API Key 無效或未啟用）。'
+          : 'Upstream authorization failed (ChatAnywhere API key may be invalid or disabled).';
+      } else if (upstream.status === 403) {
+        errorMsg = isChinese
+          ? '上游拒絕請求（可能是餘額不足、權限不足或風控限制）。'
+          : 'Upstream rejected the request (insufficient balance/permission or risk control).';
+      } else if (upstream.status === 404) {
+        errorMsg = isChinese
+          ? '上游端點不存在（請確認 CHATANYWHERE_BASE_URL 是否正確）。'
+          : 'Upstream endpoint not found (please check CHATANYWHERE_BASE_URL).';
+      } else if (upstream.status === 429) {
+        errorMsg = isChinese
+          ? '目前請求太頻繁，請稍後再試。 若持續出現，通常代表 API 配額或速率已達上限。'
+          : 'Too many requests. Please try again shortly. If it keeps happening, you may have hit the API quota/rate limit.';
+      } else if (upstream.status === 503) {
+        errorMsg = isChinese
+          ? '上游服務目前繁忙，請稍後再試。'
+          : 'Upstream service is currently busy. Please try again later.';
+      } else {
+        errorMsg = isChinese
+          ? `上游服務回傳錯誤（${upstream.status}）。`
+          : `Upstream returned an error (${upstream.status}).`;
+      }
+
       return new Response(
-        JSON.stringify({ upstreamStatus: upstream.status, upstreamBody: errText || null, retryAfter: retryAfter ?? null }),
+        JSON.stringify({
+          message: { content: errorMsg },
+          upstreamStatus: upstream.status,
+          upstreamBody: errText || null,
+          retryAfter: retryAfter ?? null
+        }),
         { status: upstream.status, headers: { 'Content-Type': 'application/json', ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}) } }
       );
     }
