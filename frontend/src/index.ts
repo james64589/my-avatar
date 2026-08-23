@@ -6,6 +6,13 @@ const isLocalDev = window.location.hostname === 'localhost' || window.location.h
 const CLOUDFLARE_WORKER_URL = 'https://avatar-chat-proxy.ljl-joe925.workers.dev';
 const API_BASE_URL = isLocalDev ? '/api/ollama' : CLOUDFLARE_WORKER_URL;
 const OLLAMA_MODEL = 'qwen3.5-q6-TS-128k:latest';
+const USER_AVATAR_URLS = [`${import.meta.env.BASE_URL}avatar.png`, '/avatar.png'];
+const ROBOT_AVATAR_URL = new URL('./assets/ds/assets/avatar-robot-round.png', import.meta.url).toString();
+
+function getAvatarBackgroundImage(): string {
+  const urls = [...USER_AVATAR_URLS, ROBOT_AVATAR_URL];
+  return urls.map(u => `url('${u}')`).join(', ');
+}
 
 // Send message to AI service (auto-switch between local Ollama and Cloudflare Worker)
 async function chatWithOllama(message: string): Promise<string> {
@@ -49,7 +56,7 @@ Answer in the same language as the user's message. If the user mixes languages, 
       };
     }
     
-    console.log(`[${isLocalDev ? 'Local Ollama' : 'Cloudflare Worker'}] Sending request`);
+    console.log(`[${isLocalDev ? 'Local' : 'Remote'}] Sending request`);
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -107,7 +114,7 @@ function addMessageToChat(content: string, isVisitor: boolean) {
     `;
   } else {
     messageEl.innerHTML = `
-      <div class="avatar avatar-twin" style="background-image:url('/avatar.png'), url('/src/assets/ds/assets/avatar-robot-round.png')"></div>
+      <div class="avatar avatar-twin" style="background-image:${getAvatarBackgroundImage()}"></div>
       <div class="msg-body">
         <div class="msg-meta"><span class="msg-name">Avatar</span><span class="msg-time">${timeStr}</span></div>
         <div class="bubble"><p>${sanitizedContent}</p></div>
@@ -180,9 +187,12 @@ function initChatEvents() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  const introAvatar = document.getElementById('introAvatar');
+  if (introAvatar) {
+    (introAvatar as HTMLDivElement).style.backgroundImage = getAvatarBackgroundImage();
+  }
   initChatEvents();
   console.log(`🎮 Chat interface initialized in ${isLocalDev ? 'LOCAL DEVELOPMENT' : 'PRODUCTION'} mode.`);
-  console.log(`API Base URL: ${API_BASE_URL}`);
   if (isLocalDev) {
     console.log('Please ensure the local Ollama service is running.');
   }
