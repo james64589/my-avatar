@@ -357,19 +357,54 @@ function initChatEvents() {
   async function ask(question: string) {
     const now = Date.now();
     if (inFlight) return;
-    if (now - lastSentAt < 1500) return;
+    
+    // 將預設發送間隔增加到 3 秒，以符合 Gemini 免費版的速率限制
+    const minInterval = 3000;
+    if (now - lastSentAt < minInterval) {
+      console.warn('Request throttled by frontend cooldown');
+      return;
+    }
+    
     inFlight = true;
     lastSentAt = now;
 
     const sendBtn = document.querySelector<HTMLButtonElement>('.send-btn');
+    const textarea = document.querySelector<HTMLTextAreaElement>('.composer textarea');
+    
     if (sendBtn) sendBtn.disabled = true;
     addMessageToChat(question, true);
     showTyping();
+    
     const reply = await chatWithOllama(question);
     hideTyping();
     addMessageToChat(reply, false);
+    
     inFlight = false;
-    if (sendBtn) sendBtn.disabled = false;
+    
+    // 檢查回覆是否包含「太頻繁」或「配額上限」的關鍵字
+    const isRateLimited = reply.includes('太頻繁') || reply.includes('Too many requests') || reply.includes('配額');
+    
+    if (sendBtn) {
+      if (isRateLimited) {
+        // 如果遇到 429，強制鎖定按鈕 10 秒，防止使用者連續點擊
+        let countdown = 10;
+        const originalText = sendBtn.innerHTML;
+        sendBtn.disabled = true;
+        
+        const timer = setInterval(() => {
+          countdown--;
+          if (countdown <= 0) {
+            clearInterval(timer);
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = originalText;
+          } else {
+            sendBtn.textContent = `${countdown}s`;
+          }
+        }, 1000);
+      } else {
+        sendBtn.disabled = false;
+      }
+    }
   }
 
   document.querySelectorAll<HTMLButtonElement>('.chip').forEach(btn => {
