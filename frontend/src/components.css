@@ -181,11 +181,11 @@ body {
 
 /* Visitor = initials token (square-ish, blue) */
 .avatar-initials {
-  width: 40px; height: 40px; flex: none; border-radius: var(--radius-md);
+  height: 40px; flex: none; border-radius: var(--radius-md);
+  min-width: 40px; padding: 0 10px;
   display: inline-flex; align-items: center; justify-content: center;
   font-family: var(--font-mono); font-weight: 600; font-size: var(--text-sm); letter-spacing: 0.02em;
   background: var(--blue-soft); color: var(--blue-ink); border: 1px solid var(--blue-line);
-  text-transform: uppercase;
 }
 .avatar-initials--sm { width: 30px; height: 30px; font-size: var(--text-2xs); }
 

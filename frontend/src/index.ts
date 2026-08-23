@@ -8,7 +8,7 @@ const API_BASE_URL = isLocalDev ? '/api/ollama' : CLOUDFLARE_WORKER_URL;
 const OLLAMA_MODEL = 'qwen3.5-q6-TS-128k:latest';
 const USER_AVATAR_URLS = [`${import.meta.env.BASE_URL}avatar.png`, '/avatar.png'];
 const ROBOT_AVATAR_URL = new URL('./assets/ds/assets/avatar-robot-round.png', import.meta.url).toString();
-const NAME_MAX_GRAPHEMES = 48;
+const NAME_MAX_GRAPHEMES = 5;
 
 type ChatHistoryItem = {
   role: 'visitor' | 'avatar';
@@ -65,6 +65,62 @@ function sliceGraphemes(text: string, maxGraphemes: number): string {
   return splitGraphemes(text).slice(0, maxGraphemes).join('');
 }
 
+type UiLang = 'zh' | 'ja' | 'ko' | 'ru' | 'fr' | 'en';
+
+function detectUiLang(text: string): UiLang {
+  const t = text || '';
+  if (/[\uAC00-\uD7AF]/.test(t)) return 'ko';
+  if (/[\u3040-\u30FF]/.test(t)) return 'ja';
+  if (/[\u4E00-\u9FFF]/.test(t)) return 'zh';
+  if (/[\u0400-\u04FF]/.test(t)) return 'ru';
+  const nav = (navigator.languages?.[0] || navigator.language || '').toLowerCase();
+  if (nav.startsWith('fr')) return 'fr';
+  return 'en';
+}
+
+function uiText(lang: UiLang, key: 'rate_limited' | 'busy' | 'quota' | 'connect_failed'): string {
+  const dict: Record<UiLang, Record<string, string>> = {
+    zh: {
+      rate_limited: '目前請求太頻繁，請稍後再試。',
+      busy: 'Gemini 目前流量較高，請稍後再試（通常再送一次就會好）。',
+      quota: '若持續出現，通常代表 API 配額或速率已達上限。',
+      connect_failed: '目前無法連線到 AI 服務，請稍後再試。',
+    },
+    ja: {
+      rate_limited: 'リクエストが多すぎます。しばらくしてから再試行してください。',
+      busy: 'Gemini が混雑しています。少し待ってから再試行してください（もう一度送ると通ることが多いです）。',
+      quota: '繰り返し発生する場合、API の上限（クォータ/レート制限）に達している可能性があります。',
+      connect_failed: 'AI サービスに接続できません。しばらくしてから再試行してください。',
+    },
+    ko: {
+      rate_limited: '요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.',
+      busy: 'Gemini 가 혼잡합니다. 잠시 후 다시 시도해 주세요(보통 한 번 더 보내면 됩니다).',
+      quota: '계속 발생하면 API 할당량/속도 제한에 도달했을 수 있습니다.',
+      connect_failed: 'AI 서비스에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+    },
+    ru: {
+      rate_limited: 'Слишком много запросов. Пожалуйста, попробуйте позже.',
+      busy: 'Gemini сейчас перегружен. Пожалуйста, попробуйте позже (часто помогает отправить ещё раз).',
+      quota: 'Если повторяется, возможно, достигнут лимит квоты/скорости API.',
+      connect_failed: 'Не удалось подключиться к AI‑сервису. Пожалуйста, попробуйте позже.',
+    },
+    fr: {
+      rate_limited: 'Trop de requêtes. Veuillez réessayer plus tard.',
+      busy: 'Gemini est momentanément saturé. Réessayez dans un instant (souvent, un second envoi passe).',
+      quota: 'Si cela persiste, vous avez probablement atteint le quota/la limite de débit de l’API.',
+      connect_failed: 'Impossible de se connecter au service IA. Veuillez réessayer plus tard.',
+    },
+    en: {
+      rate_limited: 'Too many requests. Please try again shortly.',
+      busy: 'Gemini is currently busy. Please try again shortly (often a second send works).',
+      quota: 'If it keeps happening, you may have hit the API quota/rate limit.',
+      connect_failed: 'Failed to connect to the AI service. Please try again later.',
+    },
+  };
+
+  return dict[lang][key] || dict.en[key];
+}
+
 function setUserName(name: string) {
   const normalized = name.replace(/\s+/g, ' ').trim();
   const trimmed = sliceGraphemes(normalized, NAME_MAX_GRAPHEMES);
@@ -72,10 +128,9 @@ function setUserName(name: string) {
   if (input) input.value = trimmed || 'You';
   storageSet(STORAGE_KEYS.userName, trimmed || 'You');
 
-  const initials = getUserInitials();
   const label = getUserDisplayName();
   document.querySelectorAll<HTMLElement>('.msg--visitor .avatar-initials').forEach(el => {
-    el.textContent = initials;
+    el.textContent = label;
     el.setAttribute('title', label);
   });
   document.querySelectorAll<HTMLElement>('.msg--visitor .msg-name').forEach(el => {
@@ -85,17 +140,6 @@ function setUserName(name: string) {
 
 function getUserDisplayName(): string {
   return getUserName();
-}
-
-function getUserInitials(): string {
-  const name = getUserName();
-  const parts = name.split(/\s+/).filter(Boolean);
-  const initialsRaw =
-    parts.length >= 2
-      ? `${sliceGraphemes(parts[0], 1)}${sliceGraphemes(parts[1], 1)}`
-      : sliceGraphemes(name, 2);
-  const initials = initialsRaw.toUpperCase();
-  return initials || 'YOU';
 }
 
 function isKeepChatEnabled(): boolean {
@@ -156,6 +200,7 @@ async function chatWithOllama(message: string): Promise<string> {
   try {
     let apiUrl: string;
     let requestBody: any;
+    const lang = detectUiLang(message);
     
     const systemContent = `你是資安與 AI 安全治理領域的資深顧問（偏實務、可落地）。請用使用者訊息的主要語言回覆（例如：日文→日文、法文→法文、英文→英文、繁中→繁中）。若使用者混用語言，請用主要語言回覆，必要時保留少量英文技術名詞。資訊不足時先反問澄清。`;
 
@@ -196,10 +241,10 @@ async function chatWithOllama(message: string): Promise<string> {
         details = null;
       }
       if (!isLocalDev && details?.upstreamStatus === 503) {
-        return 'Gemini 目前流量較高，請稍後再試（通常再送一次就會好）。';
+        return uiText(lang, 'busy');
       }
       if (!isLocalDev && details?.upstreamStatus === 429) {
-        return '目前請求太頻繁，請稍後再試。若持續出現，通常代表 API 配額或速率已達上限。';
+        return `${uiText(lang, 'rate_limited')} ${uiText(lang, 'quota')}`;
       }
       throw new Error(`API error: ${response.status} ${response.statusText}`);
     }
@@ -211,7 +256,8 @@ async function chatWithOllama(message: string): Promise<string> {
     if (isLocalDev) {
       return "Failed to connect to the local Ollama service. Please ensure Ollama is running (e.g., 'ollama serve') and the qwen3.5-q6-TS-128k:latest model has been downloaded.";
     } else {
-      return "Failed to connect to the AI service. Please try again later.";
+      const lang = detectUiLang(message);
+      return uiText(lang, 'connect_failed');
     }
   }
 }
@@ -233,10 +279,9 @@ function appendMessageToChat(content: string, isVisitor: boolean, opts?: { persi
 
   if (isVisitor) {
     const label = getUserDisplayName();
-    const initials = getUserInitials();
     const sanitizedLabel = label.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     messageEl.innerHTML = `
-      <span class="avatar-initials" title="${sanitizedLabel}">${initials}</span>
+      <span class="avatar-initials" title="${sanitizedLabel}">${sanitizedLabel}</span>
       <div class="msg-body">
         <div class="msg-meta"><span class="msg-name">${sanitizedLabel}</span><span class="msg-time">${timeStr}</span></div>
         <div class="bubble"><p>${sanitizedContent}</p></div>
