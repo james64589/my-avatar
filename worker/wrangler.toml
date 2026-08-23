@@ -6,5 +6,5 @@ compatibility_date = "2025-08-23"
 # 你的前端域名，需要替換成實際的GitHub Pages地址
 ALLOWED_ORIGINS = ["https://james64589.github.io", "http://localhost:5173"]
 
-# Secrets (需要通過wrangler secret put GEMINI_API_KEY來設置，不要寫在這裡)
-# GEMINI_API_KEY = "your-api-key-here"
+# Secrets (需要通過 wrangler secret put CHATANYWHERE_API_KEY 來設置，不要寫在這裡)
+# CHATANYWHERE_API_KEY = "your-api-key-here"
