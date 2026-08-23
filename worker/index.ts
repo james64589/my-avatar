@@ -4,12 +4,18 @@ type ExportedHandler<T = unknown> = {
 };
 
 const ipLastSeenAt = new Map<string, number>();
-const keyCooldowns = new Map<string, number>(); // 追蹤 API Key 的冷卻時間
+const keyCooldowns = new Map<string, number>();
 
 export default {
   async fetch(
     request: Request,
-    env: { GEMINI_API_KEY?: string; GEMINI_API_KEYS?: string; ALLOWED_ORIGINS?: string[] }
+    env: {
+      CHATANYWHERE_API_KEY?: string;
+      CHATANYWHERE_API_KEYS?: string;
+      CHATANYWHERE_BASE_URL?: string;
+      CHATANYWHERE_MODEL?: string;
+      ALLOWED_ORIGINS?: string[];
+    }
   ) {
     const url = new URL(request.url);
 
@@ -46,11 +52,14 @@ export default {
     if (ip) {
       const now = Date.now();
       const last = ipLastSeenAt.get(ip) ?? 0;
-      // 基本間隔 3 秒，但如果之前有過度請求，可以考慮動態增加
       const minIntervalMs = 3000;
       if (now - last < minIntervalMs) {
         const retryAfter = Math.ceil((minIntervalMs - (now - last)) / 1000);
-        return new Response(JSON.stringify({ error: 'RATE_LIMITED', retryAfter }), {
+        const isChinese = request.headers.get('Accept-Language')?.includes('zh');
+        const errorMsg = isChinese
+          ? '目前請求太頻繁，請稍後再試。'
+          : 'Too many requests. Please try again shortly.';
+        return new Response(JSON.stringify({ message: { content: errorMsg }, upstreamStatus: 429, retryAfter }), {
           status: 429,
           headers: {
             'Content-Type': 'application/json',
@@ -73,13 +82,16 @@ export default {
     const system = messages.find(m => m.role === 'system')?.content ?? '';
     const chat = messages.filter(m => m.role !== 'system');
 
-    const contents = chat.map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content ?? '' }]
-    }));
+    const upstreamMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
+    if (system) upstreamMessages.push({ role: 'system', content: system });
+    for (const m of chat) {
+      const role: 'user' | 'assistant' =
+        m.role === 'assistant' || m.role === 'model' || m.role === 'avatar' ? 'assistant' : 'user';
+      upstreamMessages.push({ role, content: m.content ?? '' });
+    }
 
-    const singleKey = (env.GEMINI_API_KEY ?? '').trim().replace(/^['"`]|['"`]$/g, '');
-    const keyListRaw = (env.GEMINI_API_KEYS ?? '').trim();
+    const singleKey = (env.CHATANYWHERE_API_KEY ?? '').trim().replace(/^['"`]|['"`]$/g, '');
+    const keyListRaw = (env.CHATANYWHERE_API_KEYS ?? '').trim();
     const apiKeys: string[] = [];
 
     if (keyListRaw) {
@@ -102,61 +114,53 @@ export default {
 
     let uniqueKeys = Array.from(new Set(apiKeys)).filter(Boolean);
     if (uniqueKeys.length === 0) {
-      return new Response('Missing GEMINI_API_KEY', { status: 500 });
+      return new Response('Missing CHATANYWHERE_API_KEY', { status: 500 });
     }
 
-    // 隨機化 Key 的順序，避免所有請求都先撞第一個 Key
     uniqueKeys = uniqueKeys.sort(() => Math.random() - 0.5);
 
-    const payload = JSON.stringify({
-      systemInstruction: system ? { parts: [{ text: system }] } : undefined,
-      contents
-    });
+    const baseUrl = (env.CHATANYWHERE_BASE_URL ?? 'https://api.chatanywhere.org').trim().replace(/\/+$/g, '');
+    const model = (env.CHATANYWHERE_MODEL ?? 'gpt-4o-mini').trim();
+    const payload = JSON.stringify({ model, messages: upstreamMessages, stream: false });
 
-    const upstreamUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent`;
+    const upstreamUrl = `${baseUrl}/v1/chat/completions`;
     let upstream: Response | undefined;
     let lastErrText: string | undefined;
     const now = Date.now();
 
     for (const apiKey of uniqueKeys) {
-      // 檢查 Key 是否在冷卻中 (60秒內回傳過 429)
       const cooldownUntil = keyCooldowns.get(apiKey) ?? 0;
       if (now < cooldownUntil) continue;
 
       const upstreamInit: RequestInit = {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
         body: payload
       };
 
       for (let attempt = 0; attempt < 3; attempt++) {
         upstream = await fetch(upstreamUrl, upstreamInit);
-        
         if (upstream.ok) {
-          // 成功後清除可能存在的冷卻狀態
           keyCooldowns.delete(apiKey);
           break;
         }
 
         lastErrText = await upstream.text().catch(() => '');
 
-        if (upstream.status === 400 && /API_KEY_INVALID/i.test(lastErrText)) {
-          // 無效的 Key 永久冷卻 (直到 Worker 重啟)
+        if (upstream.status === 401) {
           keyCooldowns.set(apiKey, now + 86400000);
           break;
         }
 
         if (upstream.status === 429) {
-          // 遇到 429，將此 Key 冷卻 60 秒
           keyCooldowns.set(apiKey, now + 60000);
-          break; // 直接嘗試下一個 Key，不要在同一個 Key 上重試
+          break;
         }
 
         if (upstream.status !== 503) {
-          break; // 其他錯誤碼不重試
+          break;
         }
 
-        // 僅針對 503 (服務忙碌) 進行指數退避重試
         await new Promise(resolve => setTimeout(resolve, attempt === 0 ? 300 : attempt === 1 ? 900 : 1800));
       }
 
@@ -179,13 +183,12 @@ export default {
     }
 
     if (!upstream.ok) {
-      // 處理Gemini API的速率限制和配額錯誤
       if (upstream.status === 429) {
         const isChinese = request.headers.get('Accept-Language')?.includes('zh');
-        const errorMsg = isChinese 
-          ? "目前請求太頻繁，請稍後再試。若持續出現，通常代表API配額或速率已達上限。"
-          : "Too many requests. Please try again shortly. If it keeps happening, you may have hit the API quota/rate limit.";
-        return new Response(JSON.stringify({ message: { content: errorMsg } }), {
+        const errorMsg = isChinese
+          ? '目前請求太頻繁，請稍後再試。 若持續出現，通常代表 API 配額或速率已達上限。'
+          : 'Too many requests. Please try again shortly. If it keeps happening, you may have hit the API quota/rate limit.';
+        return new Response(JSON.stringify({ message: { content: errorMsg }, upstreamStatus: 429 }), {
           status: 429,
           headers: {
             'Content-Type': 'application/json',
@@ -203,7 +206,8 @@ export default {
 
     const data = await upstream.json() as any;
     const text =
-      data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).filter(Boolean).join('') ??
+      data?.choices?.[0]?.message?.content ??
+      data?.choices?.[0]?.delta?.content ??
       '';
 
     return new Response(JSON.stringify({ message: { content: text } }), {
@@ -213,4 +217,4 @@ export default {
       }
     });
   }
-} satisfies ExportedHandler<{ GEMINI_API_KEY: string }>;
+} satisfies ExportedHandler<{ CHATANYWHERE_API_KEY?: string }>;
