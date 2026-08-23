@@ -9,6 +9,8 @@ const OLLAMA_MODEL = 'qwen3.5-q6-TS-128k:latest';
 const USER_AVATAR_URLS = [`${import.meta.env.BASE_URL}avatar.png`, '/avatar.png'];
 const ROBOT_AVATAR_URL = new URL('./assets/ds/assets/avatar-robot-round.png', import.meta.url).toString();
 const NAME_MAX_GRAPHEMES = 5;
+// 請求鎖：防止用戶重複提交請求
+let isRequestPending = false;
 
 type ChatHistoryItem = {
   role: 'visitor' | 'avatar';
@@ -78,43 +80,49 @@ function detectUiLang(text: string): UiLang {
   return 'en';
 }
 
-function uiText(lang: UiLang, key: 'rate_limited' | 'busy' | 'quota' | 'connect_failed'): string {
+function uiText(lang: UiLang, key: 'rate_limited' | 'busy' | 'quota' | 'connect_failed' | 'request_pending'): string {
   const dict: Record<UiLang, Record<string, string>> = {
     zh: {
       rate_limited: '目前請求太頻繁，請稍後再試。',
       busy: 'Gemini 目前流量較高，請稍後再試（通常再送一次就會好）。',
       quota: '若持續出現，通常代表 API 配額或速率已達上限。',
       connect_failed: '目前無法連線到 AI 服務，請稍後再試。',
+      request_pending: '正在處理您的請求，請勿重複發送消息...',
     },
     ja: {
       rate_limited: 'リクエストが多すぎます。しばらくしてから再試行してください。',
       busy: 'Gemini が混雑しています。少し待ってから再試行してください（もう一度送ると通ることが多いです）。',
       quota: '繰り返し発生する場合、API の上限（クォータ/レート制限）に達している可能性があります。',
       connect_failed: 'AI サービスに接続できません。しばらくしてから再試行してください。',
+      request_pending: 'リクエストを処理中です。重複して送信しないでください...',
     },
     ko: {
       rate_limited: '요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.',
       busy: 'Gemini 가 혼잡합니다. 잠시 후 다시 시도해 주세요(보통 한 번 더 보내면 됩니다).',
       quota: '계속 발생하면 API 할당량/속도 제한에 도달했을 수 있습니다.',
       connect_failed: 'AI 서비스에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+      request_pending: '요청을 처리 중입니다. 중복으로 보내지 마세요...',
     },
     ru: {
       rate_limited: 'Слишком много запросов. Пожалуйста, попробуйте позже.',
       busy: 'Gemini сейчас перегружен. Пожалуйста, попробуйте позже (часто помогает отправить ещё раз).',
       quota: 'Если повторяется, возможно, достигнут лимит квоты/скорости API.',
       connect_failed: 'Не удалось подключиться к AI‑сервису. Пожалуйста, попробуйте позже.',
+      request_pending: 'Запрос обрабатывается. Пожалуйста, не отправляйте повторно...',
     },
     fr: {
       rate_limited: 'Trop de requêtes. Veuillez réessayer plus tard.',
       busy: 'Gemini est momentanément saturé. Réessayez dans un instant (souvent, un second envoi passe).',
       quota: 'Si cela persiste, vous avez probablement atteint le quota/la limite de débit de l’API.',
       connect_failed: 'Impossible de se connecter au service IA. Veuillez réessayer plus tard.',
+      request_pending: 'Votre demande est en cours de traitement. Veuillez ne pas renvoyer le message...',
     },
     en: {
       rate_limited: 'Too many requests. Please try again shortly.',
       busy: 'Gemini is currently busy. Please try again shortly (often a second send works).',
       quota: 'If it keeps happening, you may have hit the API quota/rate limit.',
       connect_failed: 'Failed to connect to the AI service. Please try again later.',
+      request_pending: 'Your request is being processed. Please do not send messages repeatedly...',
     },
   };
 
@@ -197,7 +205,14 @@ function getAvatarBackgroundImage(): string {
 
 // Send message to AI service (auto-switch between local Ollama and Cloudflare Worker)
 async function chatWithOllama(message: string): Promise<string> {
+  // 如果已經有請求在處理中，直接返回錯誤
+  if (isRequestPending) {
+    const lang = detectUiLang(message);
+    return uiText(lang, 'request_pending');
+  }
+  
   try {
+    isRequestPending = true; // 獲取鎖
     let apiUrl: string;
     let requestBody: any;
     const lang = detectUiLang(message);
@@ -259,6 +274,8 @@ async function chatWithOllama(message: string): Promise<string> {
       const lang = detectUiLang(message);
       return uiText(lang, 'connect_failed');
     }
+  } finally {
+    isRequestPending = false; // 釋放鎖，確保無論成功失敗都能解鎖
   }
 }
 

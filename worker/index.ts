@@ -142,6 +142,20 @@ export default {
     if (!upstream) return new Response('Upstream unavailable', { status: 502 });
 
     if (!upstream.ok) {
+      // 處理Gemini API的速率限制和配額錯誤
+      if (upstream.status === 429) {
+        const isChinese = request.headers.get('Accept-Language')?.includes('zh');
+        const errorMsg = isChinese 
+          ? "目前請求太頻繁，請稍後再試。若持續出現，通常代表API配額或速率已達上限。"
+          : "Too many requests. Please try again shortly. If it keeps happening, you may have hit the API quota/rate limit.";
+        return new Response(JSON.stringify({ message: { content: errorMsg } }), {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(origin ? { 'Access-Control-Allow-Origin': origin } : {})
+          }
+        });
+      }
       const errText = lastErrText ?? (await upstream.text().catch(() => ''));
       const retryAfter = upstream.headers.get('Retry-After');
       return new Response(
