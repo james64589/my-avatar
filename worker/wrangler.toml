@@ -1,0 +1,10 @@
+name = "avatar-chat-proxy"
+main = "index.ts"
+compatibility_date = "2025-08-23"
+
+[vars]
+# 你的前端域名，需要替換成實際的GitHub Pages地址
+ALLOWED_ORIGINS = ["https://james64589.github.io", "http://localhost:5173"]
+
+# Secrets (需要通過wrangler secret put GEMINI_API_KEY來設置，不要寫在這裡)
+# GEMINI_API_KEY = "your-api-key-here"

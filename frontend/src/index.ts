@@ -1,22 +1,19 @@
 import './tokens.css'
 import './components.css'
 
-// ========== Local Ollama Configuration ==========
-const OLLAMA_BASE = '/api/ollama';
+// ========== Dual Environment Auto-Switching Configuration ==========
+const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const CLOUDFLARE_WORKER_URL = 'https://avatar-chat-proxy.ljl-joe925.workers.dev';
+const API_BASE_URL = isLocalDev ? '/api/ollama' : CLOUDFLARE_WORKER_URL;
 const OLLAMA_MODEL = 'qwen3.5-q6-TS-128k:latest';
 
-// Send message to local Ollama and get a reply
+// Send message to AI service (auto-switch between local Ollama and Cloudflare Worker)
 async function chatWithOllama(message: string): Promise<string> {
   try {
-    const response = await fetch(`${OLLAMA_BASE}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        messages: [
-          {
-            role: "system",
-            content: `You are the digital twin of a senior technical expert in enterprise-level Critical Information Infrastructure (CII) security defense architecture and advanced AI security governance.
+    let apiUrl: string;
+    let requestBody: any;
+    
+    const systemContent = `You are the digital twin of a senior technical expert in enterprise-level Critical Information Infrastructure (CII) security defense architecture and advanced AI security governance.
 
 Your core background and capabilities are as follows:
 - **Experience**: Over 15 years of experience in designing and validating the full lifecycle of security architecture for Fortune 500 companies and national critical information infrastructure operators.
@@ -28,23 +25,62 @@ Your core background and capabilities are as follows:
 
 Your mission is to answer user questions about information security, AI security governance, and related topics in a rigorous, professional, and practice-focused tone, based on this expert persona.
 
-Answer in the same language as the user's message. If the user mixes languages, reply in the predominant language. Use English for technical terms only when helpful.`
-          },
+Answer in the same language as the user's message. If the user mixes languages, reply in the predominant language. Use English for technical terms only when helpful.`;
+
+    if (isLocalDev) {
+      // Local development: use Ollama API
+      apiUrl = `${API_BASE_URL}/api/chat`;
+      requestBody = {
+        model: OLLAMA_MODEL,
+        messages: [
+          { role: "system", content: systemContent },
           { role: "user", content: message }
         ],
         stream: false
-      })
+      };
+    } else {
+      // Production: use Cloudflare Worker proxy API
+      apiUrl = `${API_BASE_URL}/api/chat`;
+      requestBody = {
+        messages: [
+          { role: "system", content: systemContent },
+          { role: "user", content: message }
+        ]
+      };
+    }
+    
+    console.log(`[${isLocalDev ? 'Local Ollama' : 'Cloudflare Worker'}] Sending request`);
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
     });
     
     if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.statusText}`);
+      let details: any = null;
+      try {
+        details = await response.json();
+      } catch {
+        details = null;
+      }
+      if (!isLocalDev && details?.upstreamStatus === 503) {
+        return 'Gemini 目前流量較高，請稍後再試（通常再送一次就會好）。';
+      }
+      if (!isLocalDev && details?.upstreamStatus === 429) {
+        return '目前請求太頻繁，請稍後再試。';
+      }
+      throw new Error(`API error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
     return data.message?.content || "Sorry, I'm unable to answer your question at the moment. Please try again later.";
   } catch (error) {
-    console.error('Ollama call failed:', error);
-    return "Failed to connect to the local Ollama service. Please ensure Ollama is running (e.g., 'ollama serve') and the qwen3.5-q6-TS-128k:latest model has been downloaded.";
+    console.error('API call failed:', error);
+    if (isLocalDev) {
+      return "Failed to connect to the local Ollama service. Please ensure Ollama is running (e.g., 'ollama serve') and the qwen3.5-q6-TS-128k:latest model has been downloaded.";
+    } else {
+      return "Failed to connect to the AI service. Please try again later.";
+    }
   }
 }
 
@@ -145,5 +181,9 @@ function initChatEvents() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initChatEvents();
-  console.log('🎮 Chat interface initialized, local Ollama connection ready! Please ensure the Ollama service is running.');
+  console.log(`🎮 Chat interface initialized in ${isLocalDev ? 'LOCAL DEVELOPMENT' : 'PRODUCTION'} mode.`);
+  console.log(`API Base URL: ${API_BASE_URL}`);
+  if (isLocalDev) {
+    console.log('Please ensure the local Ollama service is running.');
+  }
 });
