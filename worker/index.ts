@@ -4,7 +4,10 @@ type ExportedHandler<T = unknown> = {
 };
 
 export default {
-  async fetch(request: Request, env: { GEMINI_API_KEY?: string; ALLOWED_ORIGINS?: string[] }) {
+  async fetch(
+    request: Request,
+    env: { GEMINI_API_KEY?: string; GEMINI_API_KEYS?: string; ALLOWED_ORIGINS?: string[] }
+  ) {
     const url = new URL(request.url);
 
     const allowedOrigins = new Set(
@@ -44,8 +47,30 @@ export default {
       parts: [{ text: m.content ?? '' }]
     }));
 
-    const apiKey = (env.GEMINI_API_KEY ?? '').trim().replace(/^['"`]|['"`]$/g, '');
-    if (!apiKey) {
+    const singleKey = (env.GEMINI_API_KEY ?? '').trim().replace(/^['"`]|['"`]$/g, '');
+    const keyListRaw = (env.GEMINI_API_KEYS ?? '').trim();
+    const apiKeys: string[] = [];
+
+    if (keyListRaw) {
+      try {
+        const parsed = JSON.parse(keyListRaw);
+        if (Array.isArray(parsed)) {
+          for (const k of parsed) {
+            if (typeof k === 'string' && k.trim()) apiKeys.push(k.trim().replace(/^['"`]|['"`]$/g, ''));
+          }
+        }
+      } catch {
+        for (const k of keyListRaw.split(',')) {
+          const t = k.trim().replace(/^['"`]|['"`]$/g, '');
+          if (t) apiKeys.push(t);
+        }
+      }
+    }
+
+    if (singleKey) apiKeys.unshift(singleKey);
+
+    const uniqueKeys = Array.from(new Set(apiKeys)).filter(Boolean);
+    if (uniqueKeys.length === 0) {
       return new Response('Missing GEMINI_API_KEY', { status: 500 });
     }
 
@@ -55,26 +80,40 @@ export default {
     });
 
     const upstreamUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent`;
-    const upstreamInit: RequestInit = {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: payload
-    };
-
     let upstream: Response | undefined;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      upstream = await fetch(upstreamUrl, upstreamInit);
-      if (upstream.ok) break;
-      if (upstream.status !== 429 && upstream.status !== 503) break;
-      await new Promise(resolve => setTimeout(resolve, attempt === 0 ? 300 : attempt === 1 ? 900 : 1800));
+    let lastErrText: string | undefined;
+
+    for (const apiKey of uniqueKeys) {
+      const upstreamInit: RequestInit = {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        body: payload
+      };
+
+      for (let attempt = 0; attempt < 3; attempt++) {
+        upstream = await fetch(upstreamUrl, upstreamInit);
+        if (upstream.ok) break;
+
+        lastErrText = await upstream.text().catch(() => '');
+
+        if (upstream.status === 400 && /API_KEY_INVALID/i.test(lastErrText)) {
+          break;
+        }
+
+        if (upstream.status !== 429 && upstream.status !== 503) {
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, attempt === 0 ? 300 : attempt === 1 ? 900 : 1800));
+      }
+
+      if (upstream?.ok) break;
     }
 
-    if (!upstream) {
-      return new Response('Upstream unavailable', { status: 502 });
-    }
+    if (!upstream) return new Response('Upstream unavailable', { status: 502 });
 
     if (!upstream.ok) {
-      const errText = await upstream.text().catch(() => '');
+      const errText = lastErrText ?? (await upstream.text().catch(() => ''));
       return new Response(
         JSON.stringify({ upstreamStatus: upstream.status, upstreamBody: errText || null }),
         { status: 502, headers: { 'Content-Type': 'application/json', ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}) } }
