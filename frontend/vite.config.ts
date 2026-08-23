@@ -7,9 +7,8 @@ export default defineConfig({
     outDir: '../dist/web',                         // 【key】放 backend 的 dist/web/，方便 fly.io serving/*
     emptyOutDir: true, manifest: false,
     rollupOptions: {
-      input: { index: '/src/index.ts' },
       output: { 
-        entryFileNames: '[name].js', 
+        entryFileNames: 'assets/[name]-[hash].js', 
         assetFileNames: ({ name }) => name?.endsWith('.svg') ? 'assets/[name][extname]' : 'assets/[name]-[hash][extname]'
       }
     }
