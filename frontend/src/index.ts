@@ -9,6 +9,125 @@ const OLLAMA_MODEL = 'qwen3.5-q6-TS-128k:latest';
 const USER_AVATAR_URLS = [`${import.meta.env.BASE_URL}avatar.png`, '/avatar.png'];
 const ROBOT_AVATAR_URL = new URL('./assets/ds/assets/avatar-robot-round.png', import.meta.url).toString();
 
+type ChatHistoryItem = {
+  role: 'visitor' | 'avatar';
+  content: string;
+  ts: number;
+};
+
+const STORAGE_KEYS = {
+  keepChat: 'avatar_keep_chat',
+  chatHistory: 'avatar_chat_history_v1',
+  userName: 'avatar_user_name',
+  theme: 'avatar_theme',
+} as const;
+
+function storageGet(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function storageSet(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {}
+}
+
+function storageRemove(key: string) {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {}
+}
+
+function getUserName(): string {
+  const input = document.getElementById('userName') as HTMLInputElement | null;
+  const current = input?.value?.trim();
+  if (current) return current;
+  const saved = storageGet(STORAGE_KEYS.userName)?.trim();
+  return saved || 'You';
+}
+
+function setUserName(name: string) {
+  const trimmed = name.trim().slice(0, 20);
+  const input = document.getElementById('userName') as HTMLInputElement | null;
+  if (input) input.value = trimmed || 'You';
+  storageSet(STORAGE_KEYS.userName, trimmed || 'You');
+
+  const initials = getUserInitials();
+  const label = getUserDisplayName();
+  document.querySelectorAll<HTMLElement>('.msg--visitor .avatar-initials').forEach(el => {
+    el.textContent = initials;
+    el.setAttribute('title', label);
+  });
+  document.querySelectorAll<HTMLElement>('.msg--visitor .msg-name').forEach(el => {
+    el.textContent = label;
+  });
+}
+
+function getUserDisplayName(): string {
+  const name = getUserName();
+  const parts = name.split(/\s+/).filter(Boolean);
+  return parts.slice(0, 2).join(' ') || 'You';
+}
+
+function getUserInitials(): string {
+  const name = getUserName();
+  const parts = name.split(/\s+/).filter(Boolean);
+  const initials = (parts.length >= 2 ? `${parts[0][0]}${parts[1][0]}` : name.slice(0, 2)).toUpperCase();
+  return initials || 'YOU';
+}
+
+function isKeepChatEnabled(): boolean {
+  const checkbox = document.getElementById('keepChat') as HTMLInputElement | null;
+  if (checkbox) return checkbox.checked;
+  const saved = storageGet(STORAGE_KEYS.keepChat);
+  if (saved === null) return true;
+  return saved === '1';
+}
+
+function setKeepChatEnabled(enabled: boolean) {
+  const checkbox = document.getElementById('keepChat') as HTMLInputElement | null;
+  if (checkbox) checkbox.checked = enabled;
+  storageSet(STORAGE_KEYS.keepChat, enabled ? '1' : '0');
+  if (!enabled) storageRemove(STORAGE_KEYS.chatHistory);
+}
+
+function loadChatHistory(): ChatHistoryItem[] {
+  const raw = storageGet(STORAGE_KEYS.chatHistory);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as ChatHistoryItem[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(m => m && (m.role === 'visitor' || m.role === 'avatar') && typeof m.content === 'string' && typeof m.ts === 'number');
+  } catch {
+    return [];
+  }
+}
+
+function saveChatHistory(history: ChatHistoryItem[]) {
+  const capped = history.slice(-100);
+  storageSet(STORAGE_KEYS.chatHistory, JSON.stringify(capped));
+}
+
+function clearChatHistory() {
+  storageRemove(STORAGE_KEYS.chatHistory);
+}
+
+function getTheme(): 'dark' | 'light' {
+  const saved = storageGet(STORAGE_KEYS.theme);
+  if (saved === 'dark' || saved === 'light') return saved;
+  const current = document.documentElement.getAttribute('data-theme');
+  return current === 'light' ? 'light' : 'dark';
+}
+
+function setTheme(theme: 'dark' | 'light') {
+  document.documentElement.setAttribute('data-theme', theme);
+  storageSet(STORAGE_KEYS.theme, theme);
+}
+
 function getAvatarBackgroundImage(): string {
   const urls = [...USER_AVATAR_URLS, ROBOT_AVATAR_URL];
   return urls.map(u => `url('${u}')`).join(', ');
@@ -80,12 +199,14 @@ async function chatWithOllama(message: string): Promise<string> {
 }
 
 // ========== Chat Interaction Logic ==========
-function addMessageToChat(content: string, isVisitor: boolean) {
+function appendMessageToChat(content: string, isVisitor: boolean, opts?: { persist?: boolean; ts?: number }) {
   const convoInner = document.querySelector<HTMLDivElement>('.convo-inner');
   if (!convoInner) return;
   
-  const now = new Date();
-  const timeStr = `${now.getHours()}:${now.getMinutes().toString().padStart(2,'0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
+  const ts = opts?.ts ?? Date.now();
+  const now = new Date(ts);
+  const hours12 = now.getHours() % 12 || 12;
+  const timeStr = `${hours12}:${now.getMinutes().toString().padStart(2, '0')} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
   
   const messageEl = document.createElement('div');
   messageEl.className = `msg ${isVisitor ? 'msg--visitor' : 'msg--avatar'}`;
@@ -93,10 +214,13 @@ function addMessageToChat(content: string, isVisitor: boolean) {
   const sanitizedContent = content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   if (isVisitor) {
+    const label = getUserDisplayName();
+    const initials = getUserInitials();
+    const sanitizedLabel = label.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     messageEl.innerHTML = `
-      <span class="avatar-initials">You</span>
+      <span class="avatar-initials" title="${sanitizedLabel}">${initials}</span>
       <div class="msg-body">
-        <div class="msg-meta"><span class="msg-time">${timeStr}</span></div>
+        <div class="msg-meta"><span class="msg-name">${sanitizedLabel}</span><span class="msg-time">${timeStr}</span></div>
         <div class="bubble"><p>${sanitizedContent}</p></div>
       </div>
     `;
@@ -113,6 +237,16 @@ function addMessageToChat(content: string, isVisitor: boolean) {
   convoInner.appendChild(messageEl);
   const convo = document.querySelector<HTMLDivElement>('.convo');
   if (convo) convo.scrollTop = convo.scrollHeight;
+
+  if (opts?.persist === false) return;
+  if (!isKeepChatEnabled()) return;
+  const history = loadChatHistory();
+  history.push({ role: isVisitor ? 'visitor' : 'avatar', content, ts });
+  saveChatHistory(history);
+}
+
+function addMessageToChat(content: string, isVisitor: boolean) {
+  appendMessageToChat(content, isVisitor);
 }
 
 function showTyping() {
@@ -187,11 +321,66 @@ function initChatEvents() {
   });
 }
 
+function resetChatUi() {
+  hideTyping();
+  const convoInner = document.querySelector<HTMLDivElement>('.convo-inner');
+  if (!convoInner) return;
+  convoInner.querySelectorAll('.msg').forEach(el => el.remove());
+}
+
+function restoreChatHistory() {
+  if (!isKeepChatEnabled()) return;
+  const history = loadChatHistory();
+  for (const item of history) {
+    appendMessageToChat(item.content, item.role === 'visitor', { persist: false, ts: item.ts });
+  }
+}
+
+function initTopbar() {
+  const userNameInput = document.getElementById('userName') as HTMLInputElement | null;
+  const savedName = storageGet(STORAGE_KEYS.userName);
+  if (savedName && userNameInput) userNameInput.value = savedName;
+  userNameInput?.addEventListener('input', () => setUserName(userNameInput.value));
+  userNameInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      userNameInput.blur();
+    }
+  });
+
+  const keepChat = document.getElementById('keepChat') as HTMLInputElement | null;
+  const savedKeep = storageGet(STORAGE_KEYS.keepChat);
+  if (savedKeep !== null) setKeepChatEnabled(savedKeep === '1');
+  keepChat?.addEventListener('change', () => {
+    setKeepChatEnabled(!!keepChat.checked);
+    if (!keepChat.checked) {
+      clearChatHistory();
+    } else {
+      saveChatHistory(loadChatHistory());
+    }
+  });
+
+  const resetBtn = document.getElementById('resetChat') as HTMLButtonElement | null;
+  resetBtn?.addEventListener('click', () => {
+    resetChatUi();
+    clearChatHistory();
+  });
+
+  const themeToggle = document.getElementById('themeToggle') as HTMLButtonElement | null;
+  setTheme(getTheme());
+  themeToggle?.addEventListener('click', () => {
+    const next = getTheme() === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const introAvatar = document.getElementById('introAvatar');
   if (introAvatar) {
     (introAvatar as HTMLDivElement).style.backgroundImage = getAvatarBackgroundImage();
   }
+  initTopbar();
+  restoreChatHistory();
   initChatEvents();
   console.log(`🎮 Chat interface initialized in ${isLocalDev ? 'LOCAL DEVELOPMENT' : 'PRODUCTION'} mode.`);
   if (isLocalDev) {

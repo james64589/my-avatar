@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Avatar | Ed Donner · digital twin</title>
+<title>Avatar | James · digital twin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,500&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,18..72,400;0,18..72,500;0,18..72,600;1,18..72,400;1,18..72,500&display=swap" rel="stylesheet">
@@ -119,14 +119,14 @@
   <div class="topbar-right">
     <label class="name-field" title="Your name or initials">
       <svg class="icon icon--sm" style="color:var(--text-faint)"><use href="#i-visitor"/></svg>
-      <input type="text" value="You" placeholder="Your name / initials" />
+      <input id="userName" type="text" value="You" placeholder="Your name / initials" />
     </label>
     <label class="switch" title="Remember this conversation in your browser">
-      <input type="checkbox" checked>
+      <input id="keepChat" type="checkbox" checked>
       <span class="track"><span class="thumb"></span></span>
       <span class="switch-label">Keep chat</span>
     </label>
-    <button class="btn btn--ghost btn--sm"><svg class="icon icon--sm"><use href="#i-reset"/></svg> Reset</button>
+    <button class="btn btn--ghost btn--sm" id="resetChat"><svg class="icon icon--sm"><use href="#i-reset"/></svg> Reset</button>
     <span class="divider-v"></span>
     <button class="icon-btn" id="themeToggle" title="Toggle light / dark">
       <svg class="icon icon--sm theme-moon"><use href="#i-moon"/></svg>
