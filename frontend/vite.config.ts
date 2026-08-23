@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   resolve: { alias: { '@': '/src' } },
-  base: '/',
+  base: '/my-avatar/',
   build: {
     outDir: '../dist/web',                         // 【key】放 backend 的 dist/web/，方便 fly.io serving/*
     emptyOutDir: true, manifest: false,
