@@ -20,19 +20,7 @@ async function chatWithOllama(message: string): Promise<string> {
     let apiUrl: string;
     let requestBody: any;
     
-    const systemContent = `You are the digital twin of a senior technical expert in enterprise-level Critical Information Infrastructure (CII) security defense architecture and advanced AI security governance.
-
-Your core background and capabilities are as follows:
-- **Experience**: Over 15 years of experience in designing and validating the full lifecycle of security architecture for Fortune 500 companies and national critical information infrastructure operators.
-- **Technical Expertise**: Specializing in root cause analysis and hardening of vulnerabilities in the underlying TCP/IP protocol stack, compatibility testing of non-standard protocols in Industrial Control Systems (ICS), and full-chain boundary validation and resilience optimization of enterprise-level Zero Trust architecture.
-- **Guiding Principles**: All outputs are focused on underlying technical practices validated through hundreds of actual security assessments. I do not provide theoretical advice detached from real-world application. All technical solutions are executable and can be directly deployed and validated in isolated test environments.
-- **Core Competencies**: Full automation of enterprise DevSecOps, red team validation of adversarial machine learning in EDR/XDR detection models, security risk assessment and defense of large model-driven automated penetration testing systems, and development of non-intrusive security assessment tools for OT/IT converged environments.
-- **Compliance and Rigor**: Before initiating any project, a complete isolated environment testing plan is submitted and formal written authorization is obtained from the client's CISO. All outputs strictly comply with legal requirements like the "Cybersecurity Law" and "Data Security Law".
-- **Code Standards**: As an expert in Python and low-level systems programming, all provided code is optimized for performance and native compatibility, capable of running perfectly in offline, air-gapped security test ranges.
-
-Your mission is to answer user questions about information security, AI security governance, and related topics in a rigorous, professional, and practice-focused tone, based on this expert persona.
-
-Answer in the same language as the user's message. If the user mixes languages, reply in the predominant language. Use English for technical terms only when helpful.`;
+    const systemContent = `你是資安與 AI 安全治理領域的資深顧問（偏實務、可落地）。以繁體中文回答，必要時使用英文技術名詞。避免猜測；若資訊不足，先反問澄清。`;
 
     if (isLocalDev) {
       // Local development: use Ollama API
@@ -74,7 +62,7 @@ Answer in the same language as the user's message. If the user mixes languages, 
         return 'Gemini 目前流量較高，請稍後再試（通常再送一次就會好）。';
       }
       if (!isLocalDev && details?.upstreamStatus === 429) {
-        return '目前請求太頻繁，請稍後再試。';
+        return '目前請求太頻繁，請稍後再試。若持續出現，通常代表 API 配額或速率已達上限。';
       }
       throw new Error(`API error: ${response.status} ${response.statusText}`);
     }
@@ -149,15 +137,32 @@ function hideTyping() {
 }
 
 function initChatEvents() {
+  let inFlight = false;
+  let lastSentAt = 0;
+
+  async function ask(question: string) {
+    const now = Date.now();
+    if (inFlight) return;
+    if (now - lastSentAt < 1500) return;
+    inFlight = true;
+    lastSentAt = now;
+
+    const sendBtn = document.querySelector<HTMLButtonElement>('.send-btn');
+    if (sendBtn) sendBtn.disabled = true;
+    addMessageToChat(question, true);
+    showTyping();
+    const reply = await chatWithOllama(question);
+    hideTyping();
+    addMessageToChat(reply, false);
+    inFlight = false;
+    if (sendBtn) sendBtn.disabled = false;
+  }
+
   document.querySelectorAll<HTMLButtonElement>('.chip').forEach(btn => {
     btn.addEventListener('click', async () => {
       const question = btn.textContent?.trim() || '';
       if (!question) return;
-      addMessageToChat(question, true);
-      showTyping();
-      const reply = await chatWithOllama(question);
-      hideTyping();
-      addMessageToChat(reply, false);
+      await ask(question);
     });
   });
   
@@ -169,11 +174,7 @@ function initChatEvents() {
     if (!content) return;
     
     if (textarea) textarea.value = '';
-    addMessageToChat(content, true);
-    showTyping();
-    const reply = await chatWithOllama(content);
-    hideTyping();
-    addMessageToChat(reply, false);
+    await ask(content);
   }
   
   sendBtn?.addEventListener('click', sendMessage);

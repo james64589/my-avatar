@@ -114,9 +114,10 @@ export default {
 
     if (!upstream.ok) {
       const errText = lastErrText ?? (await upstream.text().catch(() => ''));
+      const retryAfter = upstream.headers.get('Retry-After');
       return new Response(
-        JSON.stringify({ upstreamStatus: upstream.status, upstreamBody: errText || null }),
-        { status: 502, headers: { 'Content-Type': 'application/json', ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}) } }
+        JSON.stringify({ upstreamStatus: upstream.status, upstreamBody: errText || null, retryAfter: retryAfter ?? null }),
+        { status: upstream.status, headers: { 'Content-Type': 'application/json', ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}) } }
       );
     }
 
