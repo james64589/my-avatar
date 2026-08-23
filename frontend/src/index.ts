@@ -8,6 +8,7 @@ const API_BASE_URL = isLocalDev ? '/api/ollama' : CLOUDFLARE_WORKER_URL;
 const OLLAMA_MODEL = 'qwen3.5-q6-TS-128k:latest';
 const USER_AVATAR_URLS = [`${import.meta.env.BASE_URL}avatar.png`, '/avatar.png'];
 const ROBOT_AVATAR_URL = new URL('./assets/ds/assets/avatar-robot-round.png', import.meta.url).toString();
+const NAME_MAX_GRAPHEMES = 48;
 
 type ChatHistoryItem = {
   role: 'visitor' | 'avatar';
@@ -50,8 +51,23 @@ function getUserName(): string {
   return saved || 'You';
 }
 
+function splitGraphemes(text: string): string[] {
+  if (!text) return [];
+  const Segmenter = (Intl as any)?.Segmenter as undefined | (new (locales?: string | string[], options?: any) => any);
+  if (Segmenter) {
+    const segmenter = new Segmenter(undefined, { granularity: 'grapheme' });
+    return Array.from(segmenter.segment(text), (s: any) => s.segment);
+  }
+  return Array.from(text);
+}
+
+function sliceGraphemes(text: string, maxGraphemes: number): string {
+  return splitGraphemes(text).slice(0, maxGraphemes).join('');
+}
+
 function setUserName(name: string) {
-  const trimmed = name.trim().slice(0, 20);
+  const normalized = name.replace(/\s+/g, ' ').trim();
+  const trimmed = sliceGraphemes(normalized, NAME_MAX_GRAPHEMES);
   const input = document.getElementById('userName') as HTMLInputElement | null;
   if (input) input.value = trimmed || 'You';
   storageSet(STORAGE_KEYS.userName, trimmed || 'You');
@@ -68,15 +84,17 @@ function setUserName(name: string) {
 }
 
 function getUserDisplayName(): string {
-  const name = getUserName();
-  const parts = name.split(/\s+/).filter(Boolean);
-  return parts.slice(0, 2).join(' ') || 'You';
+  return getUserName();
 }
 
 function getUserInitials(): string {
   const name = getUserName();
   const parts = name.split(/\s+/).filter(Boolean);
-  const initials = (parts.length >= 2 ? `${parts[0][0]}${parts[1][0]}` : name.slice(0, 2)).toUpperCase();
+  const initialsRaw =
+    parts.length >= 2
+      ? `${sliceGraphemes(parts[0], 1)}${sliceGraphemes(parts[1], 1)}`
+      : sliceGraphemes(name, 2);
+  const initials = initialsRaw.toUpperCase();
   return initials || 'YOU';
 }
 
