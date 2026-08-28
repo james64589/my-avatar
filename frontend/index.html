@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Avatar | James · digital twin</title>
+<title>藝凡髮廊AI助理 | 線上諮詢</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,500&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,18..72,400;0,18..72,500;0,18..72,600;1,18..72,400;1,18..72,500&display=swap" rel="stylesheet">
@@ -20,7 +20,8 @@
   }
   .brand { display: flex; align-items: center; gap: var(--space-3); }
   .brand-mark { width: 36px; height: 36px; flex: none; border-radius: var(--radius-md);
-    background: var(--surface-sunken); border: 1px solid var(--border-strong);
+    background: url('/Avatar.png') no-repeat center center; background-size: cover;
+    border: 1px solid var(--border-strong);
     display: flex; align-items: center; justify-content: center; }
   .brand-name { font-family: var(--font-display); font-weight: 600; font-size: 1.45rem;
     letter-spacing: -0.01em; line-height: 1; }
@@ -112,8 +113,8 @@
       </svg>
     </span>
     <div>
-      <div class="brand-name">Avatar</div>
-      <div class="brand-sub">SENIOR TECHNICAL EXPERT · DIGITAL TWIN</div>
+      <div class="brand-name">藝凡髮廊</div>
+      <div class="brand-sub">AI智能助理 · 協助預約與諮詢</div>
     </div>
   </div>
   <div class="topbar-right">
@@ -144,18 +145,15 @@
 
       <div class="message-bubble">
         <p>
-          Hello. I am the digital twin of a senior technical expert in enterprise-level Critical Information Infrastructure (CII) security and AI security governance. I specialize in the following areas:
+          您好！歡迎來到台南新市區藝凡髮廊 🎉 我是您的AI專屬客服，專門為您處理店內所有相關諮詢，我能協助您的事項包含：
         </p>
         <ul>
-          <li><strong>TCP/IP:</strong> Root cause analysis and hardening of underlying protocol stack vulnerabilities.</li>
-          <li><strong>ICS:</strong> Compatibility testing of non-standard protocols in Industrial Control Systems.</li>
-          <li><strong>Zero Trust:</strong> Full-chain boundary validation and resilience optimization.</li>
-          <li><strong>AI Security:</strong> Red team validation of adversarial machine learning in EDR/XDR models.</li>
-          <li><strong>OT/IT Integration:</strong> Development of non-intrusive security assessment tools.</li>
+          <li>💇‍♀️ <strong>美髮服務預約</strong>：協助您預約相關資訊，提供剪燙染護全方位服務</li>
+          <li>💬 <strong>服務資訊查詢</strong>：各項服務價格、時間、注意事項，店內僅收現金哦</li>
+          <li>📍 <strong>門市基本資訊</strong>：營業時間（週三店休）、地址、聯絡電話：06-501-4076</li>
+          <li>🍊 <strong>當季水果訂購</strong>：8-9月文旦柚、10-11月白柚，台灣在地優質水果歡迎預訂</li>
         </ul>
-        <p>
-          All my technical solutions are based on practical, verifiable security assessments. How can I help you with your specific security challenges today?
-        </p>
+        <p>如果您有任何問題，不論是預約美髮還是訂購水果，都可以隨時告訴我！</p>
       </div>
 
       <div class="day-sep"><span>Today · Just now</span></div>
@@ -167,7 +165,7 @@
   <div class="composer-dock">
     <div class="composer-wrap">
       <div class="composer">
-        <textarea placeholder="Type your message... (try Q1, Q2 for instant answers)" rows="1"></textarea>
+        <textarea placeholder="輸入你的問題... (可以輸入Q1~Q10快速獲得常見問題答案)" rows="1"></textarea>
         <button class="send-btn">
           <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 20V5"/><path d="M6 11l6-6 6 6"/>

@@ -40,10 +40,6 @@ body {
 
 /* ---- HUD grid texture (decorative bg) ---- */
 .hud-grid {
-  background-image:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 44px 44px;
 }
 
 /* ============================================================================
