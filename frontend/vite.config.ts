@@ -1,0 +1,26 @@
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  resolve: { alias: { '@': '/src' } },
+  base: '/my-avatar/',
+  build: {
+    outDir: '../dist/web',                         // 【key】放 backend 的 dist/web/，方便 fly.io serving/*
+    emptyOutDir: true, manifest: false,
+    rollupOptions: {
+      output: { 
+        entryFileNames: 'assets/[name]-[hash].js', 
+        assetFileNames: ({ name }) => name?.endsWith('.svg') ? 'assets/[name][extname]' : 'assets/[name]-[hash][extname]'
+      }
+    }
+  },
+  server: { 
+    port: 5173,
+    proxy: {
+      '/api/ollama': {
+        target: 'http://localhost:11434',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/ollama/, '')
+      }
+    }
+  }
+})
