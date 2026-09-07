@@ -311,7 +311,7 @@ function appendMessageToChat(content: string, isVisitor: boolean, opts?: { persi
     messageEl.innerHTML = `
       <div class="avatar avatar-twin" style="background-image:${getAvatarBackgroundImage()}"></div>
       <div class="msg-body">
-        <div class="msg-meta"><span class="msg-name">James</span><span class="msg-time">${timeStr}</span></div>
+        <div class="msg-meta"><span class="msg-name">Avatar</span><span class="msg-time">${timeStr}</span></div>
         <div class="bubble"><p>${sanitizedContent}</p></div>
       </div>
     `;
@@ -341,7 +341,7 @@ function showTyping() {
   const typingEl = document.createElement('div');
   typingEl.id = 'typing-indicator';
   typingEl.className = 'typing';
-  typingEl.innerHTML = '<span class="dots"><span></span><span></span><span></span></span> James is typing...';
+  typingEl.innerHTML = '<span class="dots"><span></span><span></span><span></span></span> Avatar is typing...';
   convoInner.appendChild(typingEl);
   
   const convo = document.querySelector<HTMLDivElement>('.convo');
